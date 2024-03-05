@@ -1,0 +1,165 @@
+
+#My Maps intègre 10 calques et 2000 elements KML max !!!
+
+print('\n\n'+'---------------START--------------------'+"\n")
+
+from module import mod
+from polycircles import polycircles
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
+import pandas as pd
+import fiona
+import io
+from pyproj import CRS
+
+fiona.drvsupport.supported_drivers['kml'] = 'rw' # enable KML support which is disabled by default
+fiona.drvsupport.supported_drivers['KML'] = 'rw' # enable KML support which is disabled by default
+
+
+
+#    DEPARTEMENTS    DEPARTEMENTS    DEPARTEMENTS    DEPARTEMENTS    DEPARTEMENTS    DEPARTEMENTS
+tab_dept_brut=mod.new_list.from_csv('Protechneed_CARTE_DEPARTEMENTS')
+mod.new_list.convert(tab_dept_brut)# REPLACE , -> .
+
+tab_dept_ready=[]
+for dept in tab_dept_brut:
+    tab_dept_ready.append({'dept_name':dept['DEPT_NO']+' '+dept['DEPT_NAME'],'dept_no':dept['DEPT_NO'],'lat_lon':(dept['GPS_LAT'],dept['GPS_LON'])})
+
+tab_dept_ready_distin=mod.new_list.distinct(tab_dept_ready,'dept_no') #liste distinct des depts 
+
+
+# LISTE DES FICHIERS KML
+kml_list=[]
+
+'''
+for row in tab_dept_ready_distin:
+    kml_list.append(row['dept_no'])
+'''
+
+kml_list.append('CARTE_PTN_CIRCLES')
+kml_list.append('CARTE_PTN_POINTS')
+print(kml_list)
+
+
+#    CERTIF    CERTIF    CERTIF    CERTIF    CERTIF    CERTIF    CERTIF    CERTIF    CERTIF
+list_certif=('FRG1'),('FRG2'),('LLG1'),('LVG1'),('SLG1'),('FMOG1'),('FEG1'),('HOT1'),('MOG1'),('PIG1'),('TVG1'),('Sans Enseigne')
+print('Certif -> '+(' '.join(list_certif)))
+
+
+
+#    LISTE CLIENT    LISTE CLIENT    LISTE CLIENT    LISTE CLIENT    LISTE CLIENT
+tab_cust=mod.new_list.from_csv('Protechneed_CARTE_REPARATEURS')
+mod.new_list.convert(tab_cust)# REPLACE , -> .
+
+tab_full_customers =[]
+
+for cust in tab_cust:   
+    cust_lat=cust['GPS_LAT']
+    cust_lon=cust['GPS_LON']
+    rayon=int(cust['DIST_MAX_KM'])*1000 #rayon en mètre !!
+    certif=cust['CERTIFICATION']
+    ptn=cust['ID_PTN']
+    v40=cust['ID_V40']
+    city=cust['VILLE']
+    cust_name="PTN n°"+ptn+"  ASWO n°"+v40+" "+city
+    name_certif=cust_name+'_'+certif
+   
+    tab_full_customers.append({'name_certif':name_certif,'cust_name':cust_name,'cust_lat':cust_lat,'cust_lon':cust_lon,'rayon':rayon,'lat':cust_lat,'lon':cust_lon,'certif':certif})#insert coord du client le CENTRE
+
+
+
+# AJOUT COORDONNEES POINT ET CERCLE POUR CHAQUE CLIENTS 
+tab_full_customers_full_coord =[]
+
+tab_full_customers_full_coord.extend(tab_full_customers)
+
+for cust in tab_full_customers:
+
+    multi_coord=mod.my_kml.circle(cust_lat,cust_lon,rayon)
+
+    for coord in multi_coord:
+        lat=(coord['lat'])
+        lon=(coord['lon'])
+
+        tab_full_customers_full_coord.append({'name_certif':name_certif,'cust_name':cust_name,'cust_lat':cust_lat,'cust_lon':cust_lon,'rayon':rayon,'lat':lat,'lon':lon,'certif':certif})#insert coord des points du CERCLE
+
+
+
+#   LISTE CLIENT AVEC TOUTS LES POINTS GEO    
+cust_points =[]
+
+for row in tab_full_customers_full_coord:
+
+    cust_points.append(Point((row['lon']),(row['lat'])))
+
+geodata_cust_full_coord = gpd.GeoDataFrame(tab_full_customers_full_coord, crs = 'epsg:4326', geometry = cust_points )
+
+
+
+''' CREATION DES FICHIERS KML '''       
+for current_kml in kml_list:#['CARTE_PTN_CIRCLES', 'CARTE_PTN_POINTS']    
+    kml=mod.my_kml.new(current_kml)
+
+
+    ''' CALQUE N°1 DEPARTEMENST '''
+    calque=mod.my_kml.calq(kml,'DEPARTEMENTS')    
+
+    for each_dept in tab_dept_ready_distin:
+
+        list_coor_dept=[]
+
+        for current_dept in tab_dept_ready:
+
+            if each_dept['dept_no']==current_dept['dept_no']:
+                list_coor_dept.append(current_dept['lat_lon'])
+        
+        mod.my_kml.poly(calque,each_dept['dept_name'],list_coor_dept,3)# CREATION POLYGON
+
+        result_by_cust=mod.new_list.distinct(tab_full_customers,'cust_name')
+        result_by_cust_certif=mod.new_list.distinct(tab_full_customers,'name_certif')
+
+
+
+    ''' CALQUE N°2 FULL_CUSTOMERS '''
+
+    calque=mod.my_kml.calq(kml,'FULL_CUSTOMERS')
+
+    for cust in result_by_cust:
+
+        if 'POINTS' in current_kml:
+            mod.my_kml.point(calque,cust['cust_name'],[(cust['cust_lon'],cust['cust_lat'])])# CREATION POINT
+
+        elif 'CIRCLES' in current_kml:
+            polycircle=mod.my_kml.circle(cust['cust_lat'],cust['cust_lon'],cust['rayon'])# CREATION CERCLE
+            mod.my_kml.poly(calque,cust['cust_name'],polycircle,7)# CREATION POLYGON
+
+        else:
+            print('bug -> cust={cust}')
+
+
+    '''
+
+    # CALQUE N°3,4,5,6,7,8 PAR CERTIF 
+    for current_certif in list_certif:
+        
+        calque = kml.newdocument(name=current_certif)
+
+        for cust in result_by_cust_certif:
+
+            if str(current_certif)==str(cust['certif']):
+
+                if 'CIRCLES' not in current_kml:
+                    mod.my_kml.point(calque,cust['cust_name'],[(cust['cust_lon'],cust['cust_lat'])])# CREATION POINT
+
+                if 'POINTS' not in current_kml:
+                    polycircle=mod.my_kml.circle(cust['cust_lat'],cust['cust_lon'],cust['rayon'])# CREATION CERCLE
+                    mod.my_kml.poly(calque,cust['cust_name'],polycircle,7)# CREATION POLYGON
+
+    '''
+
+    ''' SAUVEGARDE KML '''
+    mod.my_kml.sauv(str(current_kml),kml)
+
+
+
+print('---------------END--------------------')
