@@ -1,0 +1,204 @@
+#py -m ensurepip --upgrade
+#copie script get-pip.py depuis internet
+#py get-pip.py
+#py -m pip install --upgrade pip
+
+#pip3 install xlrd
+#pip install simplekml
+#pip install polycircles
+#pip install geopandas
+#pip install Fiona==1.0
+
+
+import time
+from polycircles import polycircles
+import openpyxl 
+import simplekml
+import time
+from datetime import datetime
+import csv
+import os  
+from simplekml import Kml, Style
+import geopandas as gpd
+import fiona
+import io
+from pyproj import CRS
+
+fiona.drvsupport.supported_drivers['kml'] = 'rw' # enable KML support which is disabled by default
+fiona.drvsupport.supported_drivers['KML'] = 'rw' # enable KML support which is disabled by default
+
+
+
+
+
+class my_kml():
+
+    def new(name_kml):
+        kml = simplekml.Kml()
+        print('\n\n'+str(name_kml)+' ---> KML in progress...')
+        return kml
+        
+
+    def sauv(name_file,kml):
+
+        main_path=os.getcwd()#recupère repertoire racin par défaut
+        #print('main_path ->'+main_path)
+
+        path=main_path+"\\PTN\\KML\\"+str(name_file)+'.kml'
+        #print(path)
+
+        kml.save(path)
+        print(name_file+" ---> KML done !!"+"\n\n")
+
+        #print(path)        
+        return path
+
+
+
+    def calq(kml,name):
+        new_calque = kml.newdocument(name=name)
+        print('\n\n new calq created -> '+str(name))
+        return new_calque
+
+
+    def circle(lat,lon,ray):
+        polycircle = polycircles.Polycircle(latitude=lat,longitude=lon,radius=ray,number_of_vertices=24)#   original_numb_verti = 36 #radius = rayon en metre !!
+        #return polycircle.to_kml()
+        return polycircle
+
+
+    def point(calque,my_name,my_coords): 
+        new_point=calque.newpoint(name=my_name, coords=my_coords)
+        new_point.style.iconstyle.scale = 0.5 # Icon thrice as big
+        new_point.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/pushpin/blue-pushpin.png'
+
+
+    def poly(calque,my_name,my_coords,display):
+
+        if type(my_coords)==list:
+            new_poly=calque.newpolygon(name=my_name,outerboundaryis=my_coords)
+            new_poly.polystyle.color = simplekml.Color.changealphaint(display, simplekml.Color.grey) # alpha integer -> niveau transparence
+            new_poly.style.linestyle.color=simplekml.Color.grey
+            new_poly.style.linestyle.width = 1
+
+
+        else:
+            polycircle=my_coords.to_kml()
+            new_poly=calque.newpolygon(name=my_name,outerboundaryis=polycircle)
+            new_poly.polystyle.color = simplekml.Color.changealphaint(display, simplekml.Color.blue) # alpha integer -> niveau transparence
+            new_poly.style.linestyle.color=simplekml.Color.blue
+            new_poly.style.linestyle.width = 1
+          
+           
+
+
+
+
+
+class ts():
+    
+    def date():
+        now = datetime.now() # current date and time
+        date = now.strftime("%m-%d-%Y")
+        return date
+
+    def date_time():
+        now = datetime.now() # current date and time
+        date_time_format=str(now)[:16]#DATE ET HEURE
+        my_datetime=date_time_format.replace(':','H')
+        return my_datetime
+
+
+
+class new_list():
+
+
+    def distinct(tab_input,data):
+
+        tab_distin=dict((v[data],v) for v in tab_input).values()
+
+        tab_output=[]
+
+        for row in tab_distin:
+            tab_output.append(row)
+
+        return tab_output
+    
+
+    def distinct_list(list1):
+ 
+        # initialize a null list
+        unique_list = []
+    
+        # traverse for all elements
+        for x in list1:
+            # check if exists in unique_list or not
+            if x not in unique_list:
+                unique_list.append(x)
+        
+        return unique_list
+
+
+
+    def distinct_dico(tab_input,data):
+
+        tab_distin=dict((v[data],v) for v in tab_input).values()
+
+        tab_output=[]
+
+        for row in tab_distin:
+            tab_output.append(row)
+
+        return tab_output
+
+
+
+
+    def convert(list_input):#change virguLe en point lat/long
+
+        for row in list_input:
+
+            lat=row['GPS_LAT']
+            lat_2=lat.replace(',','.')
+            lat_3=float(lat_2)
+            row['GPS_LAT']=lat_3
+
+            lon=row['GPS_LON']
+            lon_2=lon.replace(',','.')
+            lon_3=float(lon_2)
+            row['GPS_LON']=lon_3
+
+        return list_input
+
+
+    def from_list(list_input,certif):
+        ma_list=[]
+
+        for row in (list_input):
+            
+            if (row['CERTIFICATION']) in certif:
+
+                ma_list.append(row)
+
+        return ma_list
+
+
+    def from_csv(file):
+        ma_list=[] 
+
+        main_path=os.getcwd()#recupère repertoire racin par défaut
+        #folder = os.path.basename(main_path)
+
+        path=main_path+"\\PTN\\DATA\\"+str(file)+'.csv'
+        #print(path)
+
+        with open(path, 'r', newline='', encoding='utf-8-sig') as file:    
+
+            csv_reader=csv.DictReader(file, delimiter=';')
+
+            for row in csv_reader:
+                ma_list.append(row)
+
+        #print(file.closed)
+        return ma_list
+
